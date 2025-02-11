@@ -1,0 +1,38 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  apply:
+    name: Apply Terraform
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_version: 1.9.4
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: ${{ secrets.AWS_REGION }}
+        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-oidc/github-deployment
+
+    - name: Initialize Terraform
+      run: terraform init -backend-config="bucket=tf-state-${{ secrets.AWS_REGION }}-${{ secrets.AWS_ACCOUNT_ID }}" -backend-config="key=${{ github.repository }}.tfstate" -backend-config="dynamodb_table=tf-state-${{ secrets.AWS_REGION }}-${{ secrets.AWS_ACCOUNT_ID }}"
+
+    - name: Plan Terraform (Ensure Consistency)
+      run: terraform plan -out=plan.cache
+
+    - name: Apply Terraform
+      run: terraform apply -auto-approve plan.cache
